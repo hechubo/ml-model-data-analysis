@@ -1,32 +1,27 @@
 import React, { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import {
-  Activity,
-  Award,
-  Database,
-  Flame,
-  Layers,
-  ShieldAlert,
-  Sparkles,
-  TrendingDown,
-} from 'lucide-react';
 import rawPayload from './data/ames_analytics_payload.json';
 import { AnalyticsPayload } from './types/analytics';
-import { TopNavHeader, WorkbenchTabId } from './components/layout/TopNavHeader';
-import { MetricTickerCard } from './components/ui/MetricTickerCard';
-import { View1EdaOutlierLab } from './components/views/View1EdaOutlierLab';
-import { View2FeatureForge } from './components/views/View2FeatureForge';
-import { View3Sankey3DSurface } from './components/views/View3Sankey3DSurface';
+import { AmbientBackground } from './components/ui/AmbientBackground';
+import {
+  PAGES,
+  PageId,
+  TopStageStepper,
+} from './components/layout/SidebarNav';
+import { BottomPageController } from './components/layout/BottomPageController';
+import { Page1HeroPipeline } from './components/views/Page1HeroPipeline';
+import { Page2OutlierMissingLab } from './components/views/Page2OutlierMissingLab';
+import { Page3SkewnessMorphLab } from './components/views/Page3SkewnessMorphLab';
+import { Page4FeatureDiscoveryStudio } from './components/views/Page4FeatureDiscoveryStudio';
+import { Page5Topology3DSankey } from './components/views/Page5Topology3DSankey';
 import { View4SpatialParallel } from './components/views/View4SpatialParallel';
-import { View5AblationShap } from './components/views/View5AblationShap';
-import { formatUSD } from './theme/chartTheme';
+import { Page7AblationSandboxShap } from './components/views/Page7AblationSandboxShap';
 
 const initialPayload = rawPayload as unknown as AnalyticsPayload;
 
 export const App: React.FC = () => {
-  const [payload, setPayload] = useState<AnalyticsPayload>(initialPayload);
-  const [activeTab, setActiveTab] =
-    useState<WorkbenchTabId>('tab2-feature-discovery');
+  const [payload] = useState<AnalyticsPayload>(initialPayload);
+  const [activePage, setActivePage] = useState<PageId>('page-1-hero');
   const [apiOnline, setApiOnline] = useState<boolean>(false);
 
   useEffect(() => {
@@ -42,110 +37,89 @@ export const App: React.FC = () => {
       });
   }, []);
 
-  const { summary_kpis } = payload;
+  // Keyboard Left / Right arrow page navigation
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (
+        ['INPUT', 'SELECT', 'TEXTAREA'].includes(
+          (e.target as HTMLElement)?.tagName || ''
+        )
+      ) {
+        return;
+      }
+      const idx = PAGES.findIndex((p) => p.id === activePage);
+      if (e.key === 'ArrowRight' && idx < PAGES.length - 1) {
+        setActivePage(PAGES[idx + 1].id);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } else if (e.key === 'ArrowLeft' && idx > 0) {
+        setActivePage(PAGES[idx - 1].id);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [activePage]);
+
+  const handleSelectPage = (page: PageId) => {
+    setActivePage(page);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#050811] text-slate-100">
-      <TopNavHeader
-        activeTab={activeTab}
-        onSelectTab={setActiveTab}
-        kpis={summary_kpis}
+    <div className="min-h-screen flex flex-col bg-[#04070F] text-slate-100 relative selection:bg-cyan-500/30">
+      <AmbientBackground />
+
+      <TopStageStepper
+        activePage={activePage}
+        onSelectPage={handleSelectPage}
+        kpis={payload.summary_kpis}
         apiOnline={apiOnline}
       />
 
-      <main className="flex-1 max-w-[1600px] w-full mx-auto px-4 sm:px-6 py-5 space-y-5">
-        {/* Global KPI Telemetry Row */}
-        <section
-          aria-label="Global Feature Engineering KPIs"
-          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"
-        >
-          <MetricTickerCard
-            label="第一性数据诊断 · 样本与离群手术"
-            value={`${summary_kpis.clean_transactions.toLocaleString()} 套`}
-            deltaLabel={`剔除 ${summary_kpis.outliers_removed} 个高杠杆点`}
-            deltaPositive={true}
-            subtext={`原始 ${summary_kpis.total_transactions.toLocaleString()} 套交易 · 27 个缺失字段按物理语义 100% 消零`}
-            accent="cyan"
-            icon={<Database className="w-4 h-4" />}
-          />
-
-          <MetricTickerCard
-            label="领域特征合成 · 维度扩张与最强因子"
-            value={`${summary_kpis.raw_feature_count} → ${summary_kpis.engineered_feature_count} 维`}
-            deltaLabel={`r = ${summary_kpis.top_engineered_corr.toFixed(3)}`}
-            deltaPositive={true}
-            subtext={`构造 ${summary_kpis.synthesized_features_added} 项新特征 · 最强交互项 ${summary_kpis.top_engineered_feature}`}
-            accent="violet"
-            icon={<Flame className="w-4 h-4" />}
-          />
-
-          <MetricTickerCard
-            label="4阶段消融验证 · 解释方差 R² 跃升"
-            value={summary_kpis.r2_final.toFixed(4)}
-            deltaLabel={`+${(summary_kpis.r2_lift * 100).toFixed(2)}% R²`}
-            deltaPositive={true}
-            subtext={`从原始基线 Stage 0 (${summary_kpis.r2_baseline.toFixed(4)}) 跃升至 Stage 3 完整特征矩阵`}
-            accent="emerald"
-            icon={<Award className="w-4 h-4" />}
-          />
-
-          <MetricTickerCard
-            label="预测误差削减 · 交叉验证 RMSE"
-            value={formatUSD(summary_kpis.rmse_final_usd)}
-            deltaLabel={`-${summary_kpis.rmse_reduction_pct}% 误差`}
-            deltaPositive={true}
-            subtext={`相比未做特征工程基线 (${formatUSD(
-              summary_kpis.rmse_baseline_usd
-            )}) 每套房误差降低 ${formatUSD(
-              summary_kpis.rmse_baseline_usd - summary_kpis.rmse_final_usd
-            )}`}
-            accent="amber"
-            icon={<TrendingDown className="w-4 h-4" />}
-          />
-        </section>
-
-        {/* Active Stage View with Smooth Transition */}
+      <main className="relative z-10 flex-1 max-w-[1640px] w-full mx-auto px-4 sm:px-6 pt-5 pb-12">
         <AnimatePresence mode="wait">
           <motion.div
-            key={activeTab}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            transition={{ duration: 0.22, ease: 'easeOut' }}
+            key={activePage}
+            initial={{ opacity: 0, y: 18, scale: 0.992 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -14, scale: 0.992 }}
+            transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
           >
-            {activeTab === 'tab1-eda-outlier' && (
-              <View1EdaOutlierLab payload={payload} />
+            {activePage === 'page-1-hero' && (
+              <Page1HeroPipeline
+                payload={payload}
+                onNavigate={handleSelectPage}
+              />
             )}
-            {activeTab === 'tab2-feature-discovery' && (
-              <View2FeatureForge payload={payload} />
+            {activePage === 'page-2-outlier-missing' && (
+              <Page2OutlierMissingLab payload={payload} />
             )}
-            {activeTab === 'tab3-sankey-3d' && (
-              <View3Sankey3DSurface payload={payload} />
+            {activePage === 'page-3-skewness-morph' && (
+              <Page3SkewnessMorphLab payload={payload} />
             )}
-            {activeTab === 'tab4-spatial-parallel' && (
+            {activePage === 'page-4-feature-discovery' && (
+              <Page4FeatureDiscoveryStudio payload={payload} />
+            )}
+            {activePage === 'page-5-topology-3d' && (
+              <Page5Topology3DSankey payload={payload} />
+            )}
+            {activePage === 'page-6-spatial-parallel' && (
               <View4SpatialParallel payload={payload} />
             )}
-            {activeTab === 'tab5-ablation-shap' && (
-              <View5AblationShap payload={payload} apiOnline={apiOnline} />
+            {activePage === 'page-7-ablation-shap' && (
+              <Page7AblationSandboxShap
+                payload={payload}
+                apiOnline={apiOnline}
+              />
             )}
           </motion.div>
         </AnimatePresence>
       </main>
 
-      <footer className="border-t border-slate-800/70 bg-slate-950/60 py-4 px-6 mt-8">
-        <div className="max-w-[1600px] mx-auto flex flex-wrap items-center justify-between gap-3 text-xs text-slate-400">
-          <div className="flex items-center gap-2">
-            <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
-            <span>
-              <strong className="text-slate-200">AmesChronicle</strong> ·
-              数据诊断 → 特征工程 → 4阶段消融验证 → SHAP 可解释性视觉分析系统
-            </span>
-          </div>
-          <div className="font-mono text-[11px] text-slate-500">
-            Powered by Apache ECharts 5 · ECharts-GL 3D · Nivo (@nivo/heatmap & @nivo/radar) · FastAPI · Scikit-Learn
-          </div>
-        </div>
-      </footer>
+      <BottomPageController
+        activePage={activePage}
+        onSelectPage={handleSelectPage}
+      />
     </div>
   );
 };
