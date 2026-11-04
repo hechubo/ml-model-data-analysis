@@ -1,0 +1,36 @@
+{
+  "name": "ames-chronicle-workbench",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 5173",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview --port 4173"
+  },
+  "dependencies": {
+    "@nivo/core": "^0.88.0",
+    "@nivo/heatmap": "^0.88.0",
+    "@nivo/radar": "^0.88.0",
+    "clsx": "^2.1.1",
+    "echarts": "^5.6.0",
+    "echarts-for-react": "^3.0.2",
+    "echarts-gl": "^2.0.9",
+    "framer-motion": "^11.15.0",
+    "lucide-react": "^0.468.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "recharts": "^2.15.0",
+    "tailwind-merge": "^2.6.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.17",
+    "typescript": "~5.6.2",
+    "vite": "^6.0.5"
+  }
+}
