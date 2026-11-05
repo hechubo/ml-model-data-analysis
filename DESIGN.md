@@ -7,9 +7,10 @@
 - Evidence reviewed: User requirements for a classic, heavy feature-engineering project (Ames Housing) with showstopper open-source GitHub data visualization components.
 
 ## Brand
-- Personality: Precision Data Science Laboratory, High-Density Quantitative Observatory, Modern Editorial Dark Glass
+- Personality: Presentation-first Guided Analytics Lecture, Quiet Editorial Dark Stage, Progressive Derivation
 - Trust signals: Exact statistical metrics ($R^2$, RMSE, Skewness $\gamma_1$, Kurtosis $\gamma_2$, Cook's Distance, SHAP $\phi_i$ values in USD), transparent 4-stage ablation comparisons, zero fabricated numbers
-- Avoid: Generic white Bootstrap admin templates, default unstyled chart colors, cluttered rainbow palettes, pie charts with >5 slices, unlabelled axes
+- Avoid: Dense neon-glow dashboards that dump every chart at once, generic white Bootstrap admin templates, cluttered rainbow palettes, pie charts with >5 slices, unlabelled axes
+- Presentation contract: Each chapter uses a left **循序推导** rail (observe → hypothesize → evidence → formula → gain) + right interactive canvas; analysis **维度** chips switch the evidence view; Space advances the current derivation beat; ←/→ change chapters
 
 ## Product goals
 - Goals:

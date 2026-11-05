@@ -28,26 +28,25 @@ export const App: React.FC = () => {
     fetch('/api/health')
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
-        if (data && data.status === 'ok') {
-          setApiOnline(true);
-        }
+        if (data && data.status === 'ok') setApiOnline(true);
       })
-      .catch(() => {
-        setApiOnline(false);
-      });
+      .catch(() => setApiOnline(false));
   }, []);
 
-  // Keyboard Left / Right arrow page navigation
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (
-        ['INPUT', 'SELECT', 'TEXTAREA'].includes(
-          (e.target as HTMLElement)?.tagName || ''
-        )
-      ) {
+      const tag = (e.target as HTMLElement)?.tagName || '';
+      if (['INPUT', 'SELECT', 'TEXTAREA'].includes(tag)) return;
+
+      const idx = PAGES.findIndex((p) => p.id === activePage);
+
+      // Space / Enter: advance within-page derivation (presentation clicker)
+      if (e.key === ' ' || e.key === 'Enter') {
+        e.preventDefault();
+        window.dispatchEvent(new CustomEvent('ames:step-forward'));
         return;
       }
-      const idx = PAGES.findIndex((p) => p.id === activePage);
+
       if (e.key === 'ArrowRight' && idx < PAGES.length - 1) {
         setActivePage(PAGES[idx + 1].id);
         window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -66,7 +65,7 @@ export const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#04070F] text-slate-100 relative selection:bg-cyan-500/30">
+    <div className="min-h-screen flex flex-col bg-[#05080F] text-slate-100 relative">
       <AmbientBackground />
 
       <TopStageStepper
@@ -76,14 +75,14 @@ export const App: React.FC = () => {
         apiOnline={apiOnline}
       />
 
-      <main className="relative z-10 flex-1 max-w-[1640px] w-full mx-auto px-4 sm:px-6 pt-5 pb-12">
+      <main className="relative z-10 flex-1 max-w-[1680px] w-full mx-auto px-4 sm:px-6 lg:px-7 pt-5 pb-24">
         <AnimatePresence mode="wait">
           <motion.div
             key={activePage}
-            initial={{ opacity: 0, y: 18, scale: 0.992 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -14, scale: 0.992 }}
-            transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+            initial={{ opacity: 0, y: 14 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
           >
             {activePage === 'page-1-hero' && (
               <Page1HeroPipeline

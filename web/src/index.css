@@ -7,17 +7,20 @@
     color-scheme: dark;
   }
 
+  html {
+    scroll-behavior: smooth;
+  }
+
   body {
-    background-color: #050811;
-    background-image:
-      radial-gradient(at 12% 8%, rgba(6, 182, 212, 0.12) 0px, transparent 42%),
-      radial-gradient(at 88% 12%, rgba(139, 92, 246, 0.12) 0px, transparent 45%),
-      radial-gradient(at 50% 90%, rgba(16, 185, 129, 0.07) 0px, transparent 50%),
-      linear-gradient(to right, rgba(148, 163, 184, 0.03) 1px, transparent 1px),
-      linear-gradient(to bottom, rgba(148, 163, 184, 0.03) 1px, transparent 1px);
-    background-size: 100% 100%, 100% 100%, 100% 100%, 36px 36px, 36px 36px;
-    background-attachment: fixed;
+    background-color: #05080f;
+    color: #e2e8f0;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    background: rgba(56, 189, 248, 0.28);
   }
 }
 
@@ -25,13 +28,20 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Custom sleek dark scrollbar */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 ::-webkit-scrollbar-track {
-  background: #070b14;
+  background: #05080f;
 }
 ::-webkit-scrollbar-thumb {
   background: #1e293b;
@@ -39,4 +49,22 @@
 }
 ::-webkit-scrollbar-thumb:hover {
   background: #334155;
+}
+
+/* Soft range input for presentation controls */
+input[type='range'] {
+  appearance: none;
+  height: 4px;
+  border-radius: 9999px;
+  background: rgba(148, 163, 184, 0.2);
+}
+input[type='range']::-webkit-slider-thumb {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 9999px;
+  background: #38bdf8;
+  border: 2px solid #0b1220;
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.25);
+  cursor: pointer;
 }

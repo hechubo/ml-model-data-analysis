@@ -1,9 +1,12 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import ReactECharts from 'echarts-for-react';
 import { ResponsiveRadar } from '@nivo/radar';
-import { Compass, Layers, MapPin } from 'lucide-react';
 import { AnalyticsPayload } from '../../types/analytics';
-import { BentoCard } from '../ui/BentoCard';
+import {
+  AnalysisDimension,
+  DerivationStep,
+  PresentationStage,
+} from '../ui/PresentationStage';
 import {
   CHART_COLORS,
   ECHARTS_DARK_TOOLTIP,
@@ -11,6 +14,39 @@ import {
   formatCompactUSD,
   formatUSD,
 } from '../../theme/chartTheme';
+
+const STEPS: DerivationStep[] = [
+  {
+    id: 'bubbles',
+    label: '看见社区断层',
+    question: '28 个社区差在哪？',
+    narrative:
+      '气泡图把社区摊在「平均面积 × 平滑编码价」平面上：Tier 1 豪宅区与 Tier 4 入口区在估值轴上拉开巨大断层。社区解释了房价方差的一半以上。',
+    metric: 'Neighborhood 解释 ≈ 54%+ 房价方差',
+  },
+  {
+    id: 'why-te',
+    label: '为何不能 One-Hot',
+    question: '小样本社区怎么编码？',
+    narrative:
+      'Blueste、GrnHill 等社区样本不足 10 套，直接 One-Hot / 原始均值极易过拟合。因此改用 5 折经验贝叶斯平滑：小样本向全局均值收缩。',
+    formula: 'TE(c) = (n_c·ȳ_c + m·ȳ) / (n_c + m)',
+  },
+  {
+    id: 'parallel',
+    label: '平行坐标刷选',
+    question: '高价房在多维上长什么样？',
+    narrative:
+      '切换到 7 轴平行坐标，按社会经济层级过滤，再在 SalePrice 轴上刷选。你会看到高价轨迹在 TotalSF、OverallQual、AmenityScore 上束状收敛。',
+  },
+  {
+    id: 'radar',
+    label: '雷达画像对比',
+    question: '任意社区六维差异？',
+    narrative:
+      '点选最多 4 个社区，比较平滑估值、空间、品质、精装、新颖度与单价。演示时建议对照 NoRidge vs OldTown。',
+  },
+];
 
 interface View4Props {
   payload: AnalyticsPayload;
@@ -27,6 +63,10 @@ export const View4SpatialParallel: React.FC<View4Props> = ({ payload }) => {
   const { neighborhood_profiles, shap_xai } = payload;
   const { parallel_coords } = shap_xai;
 
+  const [step, setStep] = useState(0);
+  const [viewDim, setViewDim] = useState<'bubbles' | 'parallel' | 'radar'>(
+    'bubbles'
+  );
   const [selectedTierFilter, setSelectedTierFilter] = useState<number | 'ALL'>(
     'ALL'
   );
@@ -36,6 +76,18 @@ export const View4SpatialParallel: React.FC<View4Props> = ({ payload }) => {
     'CollgCr',
     'OldTown',
   ]);
+
+  useEffect(() => {
+    if (step <= 1) setViewDim('bubbles');
+    else if (step === 2) setViewDim('parallel');
+    else setViewDim('radar');
+  }, [step]);
+
+  const dims: AnalysisDimension[] = [
+    { id: 'bubbles', label: '社区气泡', hint: 'OOF TE 空间矩阵' },
+    { id: 'parallel', label: '平行坐标', hint: '7 维刷选' },
+    { id: 'radar', label: '雷达画像', hint: '最多 4 社区对比' },
+  ];
 
   // 1. ECharts Option: 28-Neighborhood OOF Target Encoding & Socioeconomic Tier Bubble Matrix
   const neighborhoodBubbleOption = useMemo(() => {
@@ -315,133 +367,130 @@ export const View4SpatialParallel: React.FC<View4Props> = ({ payload }) => {
     });
   };
 
-  return (
-    <div className="space-y-5">
-      {/* Row 1: 28-Neighborhood OOF Target Encoding Bubble Matrix (7 cols) + Nivo Radar (5 cols) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-        <BentoCard
-          className="lg:col-span-7"
-          title="28 个社区空间异质性与 5 折经验贝叶斯平滑目标编码矩阵"
-          subtitle="气泡大小代表样本交易量；纵轴为 5 折交叉验证经验贝叶斯平滑编码值 Neighborhood_TE，颜色区分 4 大社会经济层级"
-          badge="OOF Empirical Bayes TE"
-          badgeTone="emerald"
-          insight="数据分析发现：NoRidge / NridgHt / StoneBr 等顶级社区均价突破 $310k+，而 MeadowV / BrDale 仅 $95k~$105k（社区解释了 54%+ 的房价方差）。但 Blueste、GrnHill 等小社区样本不足 10 套，因此我们构造 5 折经验贝叶斯平滑编码 Neighborhood_TE (r=0.746)，有效抑制小样本过拟合。"
-        >
-          <div className="h-[395px] w-full">
-            <ReactECharts
-              option={neighborhoodBubbleOption}
-              style={{ height: '100%', width: '100%' }}
-              notMerge={true}
-            />
-          </div>
-        </BentoCard>
+  const insights = [
+    '社区不是「标签噪声」——它系统性地抬升或压低整条估值曲线。',
+    '小样本社区必须向全局收缩：这是 Neighborhood_TE 存在的唯一理由。',
+    '平行坐标刷选让「高价房长什么样」变成可操作的多维证据，而不是口头描述。',
+    '雷达图适合演讲收尾：点名两个社区，六维断层一目了然。',
+  ];
 
-        <BentoCard
-          className="lg:col-span-5"
-          title="多社区六维衍生特征画像雷达对比 (@nivo/radar)"
-          subtitle="点击下方社区胶囊切换对比对象（最多同时对比 4 个社区在 6 大工程化指标上的归一化得分）"
-          badge="@nivo/radar"
-          badgeTone="violet"
-          insight="对比 NoRidge（高档新贵区）与 OldTown（历史老城区）可见：二者不仅在总面积上拉开差距，在『建筑新颖度』与『精装配套指数 (AmenityScore)』上更是形成鲜明的六边形断层。"
-        >
-          <div className="flex flex-wrap gap-1.5 mb-2">
-            {neighborhood_profiles.slice(0, 12).map((n) => {
-              const active = radarNeighborhoods.includes(n.neighborhood);
-              return (
+  return (
+    <PresentationStage
+      chapter="06"
+      kicker="空间篇 · 编码与刷选"
+      title="社区异质性：从气泡断层到多维轨迹"
+      subtitle="先建立社区价差的直觉，再解释为什么要做平滑目标编码，最后用平行坐标与雷达把「房源画像」交给观众亲手刷选。"
+      accent="sky"
+      steps={STEPS}
+      activeStep={step}
+      onStepChange={setStep}
+      dimensions={dims}
+      activeDimension={viewDim}
+      onDimensionChange={(id) => {
+        setViewDim(id as 'bubbles' | 'parallel' | 'radar');
+        if (id === 'bubbles') setStep(0);
+        if (id === 'parallel') setStep(2);
+        if (id === 'radar') setStep(3);
+      }}
+      insight={insights[step]}
+      aside={
+        viewDim === 'parallel' ? (
+          <div className="rounded-[20px] border border-white/8 bg-[#0A1020]/70 p-3.5">
+            <div className="text-[11px] font-mono uppercase tracking-wider text-slate-500 mb-2">
+              层级过滤
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {(
+                [
+                  { id: 'ALL' as const, label: '全部' },
+                  { id: 4 as const, label: 'Tier1' },
+                  { id: 3 as const, label: 'Tier2' },
+                  { id: 2 as const, label: 'Tier3' },
+                  { id: 1 as const, label: 'Tier4' },
+                ] as const
+              ).map((item) => (
                 <button
-                  key={n.neighborhood}
+                  key={String(item.id)}
                   type="button"
-                  onClick={() => toggleNeighborhoodRadar(n.neighborhood)}
-                  className={`px-2 py-0.5 rounded-md text-[11px] font-mono border transition-all ${
-                    active
-                      ? 'bg-cyan-500/25 border-cyan-400 text-cyan-200'
-                      : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
+                  onClick={() => setSelectedTierFilter(item.id)}
+                  className={`px-2.5 py-1 rounded-lg text-[11px] border ${
+                    selectedTierFilter === item.id
+                      ? 'border-sky-400/40 bg-sky-500/15 text-sky-100'
+                      : 'border-white/8 text-slate-400'
                   }`}
                 >
-                  {n.neighborhood}
+                  {item.label}
                 </button>
-              );
-            })}
+              ))}
+            </div>
           </div>
-          <div className="h-[335px] w-full">
-            <ResponsiveRadar
-              data={radarData}
-              keys={radarNeighborhoods}
-              indexBy="metric"
-              maxValue={100}
-              margin={{ top: 36, right: 68, bottom: 36, left: 68 }}
-              curve="linearClosed"
-              borderWidth={2}
-              borderColor={{ from: 'color' }}
-              gridLevels={4}
-              gridShape="circular"
-              gridLabelOffset={14}
-              enableDots={true}
-              dotSize={7}
-              dotColor={{ theme: 'background' }}
-              dotBorderWidth={2}
-              colors={['#06B6D4', '#10B981', '#8B5CF6', '#F59E0B']}
-              fillOpacity={0.22}
-              blendMode="normal"
-              theme={NIVO_DARK_THEME}
-              legends={[
-                {
-                  anchor: 'top-left',
-                  direction: 'column',
-                  translateX: -50,
-                  translateY: -24,
-                  itemWidth: 70,
-                  itemHeight: 18,
-                  itemTextColor: '#CBD5E1',
-                  symbolSize: 10,
-                  symbolShape: 'circle',
-                },
-              ]}
-            />
+        ) : viewDim === 'radar' ? (
+          <div className="rounded-[20px] border border-white/8 bg-[#0A1020]/70 p-3.5">
+            <div className="text-[11px] font-mono uppercase tracking-wider text-slate-500 mb-2">
+              选择社区（最多 4）
+            </div>
+            <div className="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto">
+              {neighborhood_profiles.slice(0, 16).map((n) => {
+                const active = radarNeighborhoods.includes(n.neighborhood);
+                return (
+                  <button
+                    key={n.neighborhood}
+                    type="button"
+                    onClick={() => toggleNeighborhoodRadar(n.neighborhood)}
+                    className={`px-2 py-0.5 rounded-md text-[11px] font-mono border ${
+                      active
+                        ? 'bg-cyan-500/20 border-cyan-400/50 text-cyan-100'
+                        : 'border-white/8 text-slate-500'
+                    }`}
+                  >
+                    {n.neighborhood}
+                  </button>
+                );
+              })}
+            </div>
           </div>
-        </BentoCard>
-      </div>
-
-      {/* Row 2: Brushable 7-Axis Parallel Coordinates Explorer */}
-      <BentoCard
-        title="高维特征平行坐标刷选探索器 (ECharts Brushable Parallel Coordinates)"
-        subtitle="鼠标可在任意坐标轴上垂直拖拽刷选（Brush）区间，实时过滤并追踪高价值房产在 7 个工程化维度上的协同轨迹"
-        badge="320 套分层抽样房产 × 7 维工程特征"
-        badgeTone="cyan"
-        insight="在最后一根 SalePrice 坐标轴上框选 >$300k 的高价房轨迹，可以看到左端 TotalSF (>2,800 sq.ft)、OverallQual (≥8)、TotalBath (≥3.0) 与 AmenityScore (>20) 呈现高度一致的束状收敛。"
-        headerRight={
-          <div className="inline-flex rounded-lg bg-slate-950 p-0.5 border border-slate-800 text-xs">
-            {[
-              { id: 'ALL', label: '全部层级' },
-              { id: 4, label: 'Tier 1 豪宅区' },
-              { id: 3, label: 'Tier 2 改善区' },
-              { id: 2, label: 'Tier 3 刚需区' },
-              { id: 1, label: 'Tier 4 老城区' },
-            ].map((item) => (
-              <button
-                key={String(item.id)}
-                type="button"
-                onClick={() => setSelectedTierFilter(item.id as any)}
-                className={`px-2.5 py-1 rounded-md font-medium transition-all ${
-                  selectedTierFilter === item.id
-                    ? 'bg-cyan-500/25 text-cyan-200 border border-cyan-400/40'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
-        }
-      >
-        <div className="h-[380px] w-full">
+        ) : null
+      }
+    >
+      <div className="h-[460px] w-full">
+        {viewDim === 'bubbles' && (
+          <ReactECharts
+            option={neighborhoodBubbleOption}
+            style={{ height: '100%', width: '100%' }}
+            notMerge
+          />
+        )}
+        {viewDim === 'parallel' && (
           <ReactECharts
             option={parallelOption}
             style={{ height: '100%', width: '100%' }}
-            notMerge={true}
+            notMerge
           />
-        </div>
-      </BentoCard>
-    </div>
+        )}
+        {viewDim === 'radar' && (
+          <ResponsiveRadar
+            data={radarData}
+            keys={radarNeighborhoods}
+            indexBy="metric"
+            maxValue={100}
+            margin={{ top: 40, right: 72, bottom: 40, left: 72 }}
+            curve="linearClosed"
+            borderWidth={2}
+            borderColor={{ from: 'color' }}
+            gridLevels={4}
+            gridShape="circular"
+            gridLabelOffset={14}
+            enableDots
+            dotSize={7}
+            dotColor={{ theme: 'background' }}
+            dotBorderWidth={2}
+            colors={['#06B6D4', '#10B981', '#8B5CF6', '#F59E0B']}
+            fillOpacity={0.22}
+            blendMode="normal"
+            theme={NIVO_DARK_THEME}
+          />
+        )}
+      </div>
+    </PresentationStage>
   );
 };

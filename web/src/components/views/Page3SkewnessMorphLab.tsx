@@ -1,8 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import ReactECharts from 'echarts-for-react';
-import { motion } from 'framer-motion';
-import { Play, Pause, Sparkles, Waves } from 'lucide-react';
+import { Play } from 'lucide-react';
 import { AnalyticsPayload } from '../../types/analytics';
+import {
+  AnalysisDimension,
+  DerivationStep,
+  PresentationStage,
+} from '../ui/PresentationStage';
 import { AnimatedNumber } from '../ui/AnimatedNumber';
 import { CHART_COLORS, ECHARTS_DARK_TOOLTIP } from '../../theme/chartTheme';
 
@@ -10,59 +14,108 @@ interface Page3Props {
   payload: AnalyticsPayload;
 }
 
+const STEPS: DerivationStep[] = [
+  {
+    id: 'see-skew',
+    label: '看见右偏',
+    question: '原始房价长什么样？',
+    narrative:
+      'SalePrice 等面积类特征严重右偏：多数房子挤在左侧，少数豪宅把均值和残差「拽」向右边。线性模型假设残差近似正态、同方差——右偏直接违背这一点。',
+    formula: 'γ₁(SalePrice) ≈ 1.81  ·  理想高斯 γ₁ ≈ 0',
+  },
+  {
+    id: 'why-hurt',
+    label: '偏态如何伤模型',
+    question: '为什么不能「假装没看见」？',
+    narrative:
+      '高价房残差被放大，低价房被压缩，导致置信区间失真、对豪宅欠拟合。Q-Q 图上两端翘起，就是同方差假设在抗议。',
+    metric: '症状：Q-Q 两端偏离 45° 线 · 高价段残差异方差',
+  },
+  {
+    id: 'morph',
+    label: '拖动 λ 变形',
+    question: '变换之后，分布如何收敛？',
+    narrative:
+      '选择特征，拖动变形进度（或一键播放）。直方图长尾被压回中心，KDE 变成对称钟形，偏度 γ₁ 向 0 靠近——这是 Box-Cox / Log1p 的直观证据。',
+    formula: 'y(λ) = (x^λ − 1)/λ   (λ→0 时退化为 log)',
+  },
+  {
+    id: 'qq-proof',
+    label: '用 Q-Q 验收',
+    question: '怎样才算「够正态」？',
+    narrative:
+      '把视图切到 Q-Q：点越贴近对角线，越接近高斯基准。这一步单独贡献约 −$1,570 CV RMSE——仍然只是分布校准，还没加领域特征。',
+    metric: 'Skewness surgery  ·  ΔRMSE ≈ −$1,570',
+  },
+];
+
 export const Page3SkewnessMorphLab: React.FC<Page3Props> = ({ payload }) => {
   const { skewness_lab } = payload;
   const featureKeys = Object.keys(skewness_lab);
-
-  const [selectedFeature, setSelectedFeature] = useState<string>(
+  const [step, setStep] = useState(0);
+  const [selectedFeature, setSelectedFeature] = useState(
     featureKeys.includes('SalePrice') ? 'SalePrice' : featureKeys[0]
   );
-  // Continuous morph progress t in [0, 1]: 0 = Raw Skewed, 1 = Box-Cox / Log1p Normalized
-  const [morphProgress, setMorphProgress] = useState<number>(1.0);
-  const [isAutoPlaying, setIsAutoPlaying] = useState<boolean>(false);
+  const [morphProgress, setMorphProgress] = useState(0);
+  const [isAutoPlaying, setIsAutoPlaying] = useState(false);
+  const [viewDim, setViewDim] = useState<'hist' | 'qq'>('hist');
 
   const item = skewness_lab[selectedFeature];
+
+  // Sync morph with derivation beats
+  useEffect(() => {
+    if (step === 0) {
+      setMorphProgress(0);
+      setViewDim('hist');
+    } else if (step === 1) {
+      setMorphProgress(0);
+      setViewDim('qq');
+    } else if (step === 2) {
+      setViewDim('hist');
+      setIsAutoPlaying(true);
+    } else if (step === 3) {
+      setMorphProgress(1);
+      setViewDim('qq');
+      setIsAutoPlaying(false);
+    }
+  }, [step]);
 
   useEffect(() => {
     if (!isAutoPlaying) return;
     let raf = 0;
     const start = performance.now();
-    const duration = 2200;
-
+    const duration = 2000;
     const animate = (now: number) => {
-      const elapsed = now - start;
-      const t = Math.min(1, elapsed / duration);
-      // Smooth sine wave 0 -> 1
+      const t = Math.min(1, (now - start) / duration);
       const eased = 0.5 - 0.5 * Math.cos(Math.PI * t);
       setMorphProgress(Number(eased.toFixed(3)));
-      if (t < 1) {
-        raf = requestAnimationFrame(animate);
-      } else {
-        setIsAutoPlaying(false);
-      }
+      if (t < 1) raf = requestAnimationFrame(animate);
+      else setIsAutoPlaying(false);
     };
-
     setMorphProgress(0);
     raf = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(raf);
   }, [isAutoPlaying]);
 
-  // Interpolate between Raw and Transformed histograms, KDEs, Q-Q points, and Skewness/Kurtosis
-  const morphedData = useMemo(() => {
+  const dims: AnalysisDimension[] = useMemo(
+    () =>
+      featureKeys.map((k) => ({
+        id: k,
+        label: k,
+        hint: `原始偏度 γ₁ = ${skewness_lab[k].raw_skew}`,
+      })),
+    [featureKeys, skewness_lab]
+  );
+
+  const morphed = useMemo(() => {
     if (!item) return null;
     const t = morphProgress;
-    const rawCounts = item.raw_hist.counts;
-    const normCounts = item.boxcox_hist.counts;
-    const rawKde = item.raw_hist.kde;
-    const normKde = item.boxcox_hist.kde;
-
-    const counts = rawCounts.map((rc, i) =>
-      Math.round((1 - t) * rc + t * (normCounts[i] ?? rc))
+    const counts = item.raw_hist.counts.map((rc, i) =>
+      Math.round((1 - t) * rc + t * (item.boxcox_hist.counts[i] ?? rc))
     );
-    const kde = rawKde.map((rk, i) =>
-      Number(((1 - t) * rk + t * (normKde[i] ?? rk)).toFixed(2))
+    const kde = item.raw_hist.kde.map((rk, i) =>
+      Number(((1 - t) * rk + t * (item.boxcox_hist.kde[i] ?? rk)).toFixed(2))
     );
-
     const qqPoints = item.qq_raw.map((rq, i) => {
       const nq = item.qq_boxcox[i] || item.qq_transformed[i] || rq;
       return [
@@ -70,360 +123,251 @@ export const Page3SkewnessMorphLab: React.FC<Page3Props> = ({ payload }) => {
         Number(((1 - t) * rq.sample + t * nq.sample).toFixed(3)),
       ];
     });
-
-    const currentSkew = (1 - t) * item.raw_skew + t * item.boxcox_skew;
-    const currentKurt = (1 - t) * item.raw_kurtosis + t * item.boxcox_kurtosis;
-    const currentLambda = (1 - t) * 1.0 + t * item.boxcox_lambda;
-
     return {
       counts,
       kde,
       qqPoints,
-      currentSkew,
-      currentKurt,
-      currentLambda,
+      skew: (1 - t) * item.raw_skew + t * item.boxcox_skew,
+      kurt: (1 - t) * item.raw_kurtosis + t * item.boxcox_kurtosis,
+      lambda: (1 - t) * 1 + t * item.boxcox_lambda,
     };
   }, [item, morphProgress]);
 
   const histOption = useMemo(() => {
-    if (!item || !morphedData) return {};
-    const t = morphProgress;
-    const isNormalized = t > 0.5;
-
+    if (!item || !morphed) return {};
+    const normalized = morphProgress > 0.5;
     return {
       backgroundColor: 'transparent',
-      animationDurationUpdate: 120,
-      tooltip: {
-        ...ECHARTS_DARK_TOOLTIP,
-        trigger: 'axis',
-      },
+      animationDurationUpdate: 100,
+      tooltip: { ...ECHARTS_DARK_TOOLTIP, trigger: 'axis' },
       legend: {
-        top: 6,
-        right: 12,
-        textStyle: { color: '#CBD5E1', fontSize: 11 },
+        top: 2,
+        right: 4,
+        textStyle: { color: '#94A3B8', fontSize: 11 },
       },
-      grid: { left: 52, right: 24, top: 48, bottom: 44 },
+      grid: { left: 50, right: 18, top: 40, bottom: 44 },
       xAxis: {
         type: 'category',
-        name: `${selectedFeature} 分位区间 (Morph = ${Math.round(t * 100)}%)`,
+        name: `${selectedFeature} · 变形 ${Math.round(morphProgress * 100)}%`,
         nameLocation: 'middle',
         nameGap: 28,
-        nameTextStyle: { color: '#94A3B8', fontSize: 11 },
-        data: item.raw_hist.bins.map((_, idx) => `B${idx + 1}`),
-        axisLabel: { color: '#94A3B8', fontFamily: 'JetBrains Mono', fontSize: 10 },
+        nameTextStyle: { color: '#64748B', fontSize: 11 },
+        data: item.raw_hist.bins.map((_, i) => `B${i + 1}`),
+        axisLabel: { color: '#94A3B8', fontSize: 10, fontFamily: 'JetBrains Mono' },
       },
       yAxis: {
         type: 'value',
-        name: '房产样本频数 (Count)',
-        nameTextStyle: { color: '#94A3B8', fontSize: 11 },
+        name: '频数',
+        nameTextStyle: { color: '#64748B', fontSize: 11 },
         splitLine: { lineStyle: { color: CHART_COLORS.gridLine } },
         axisLabel: { color: '#94A3B8', fontFamily: 'JetBrains Mono' },
       },
       series: [
         {
-          name: '样本频数直方图 (Histogram)',
+          name: '直方图',
           type: 'bar',
-          barWidth: '78%',
+          barWidth: '76%',
           itemStyle: {
-            color: isNormalized
-              ? {
-                  type: 'linear',
-                  x: 0,
-                  y: 0,
-                  x2: 0,
-                  y2: 1,
-                  colorStops: [
-                    { offset: 0, color: '#06B6D4' },
-                    { offset: 1, color: 'rgba(6, 182, 212, 0.2)' },
+            color: {
+              type: 'linear',
+              x: 0,
+              y: 0,
+              x2: 0,
+              y2: 1,
+              colorStops: normalized
+                ? [
+                    { offset: 0, color: 'rgba(56,189,248,0.85)' },
+                    { offset: 1, color: 'rgba(56,189,248,0.12)' },
+                  ]
+                : [
+                    { offset: 0, color: 'rgba(244,63,94,0.8)' },
+                    { offset: 1, color: 'rgba(244,63,94,0.12)' },
                   ],
-                }
-              : {
-                  type: 'linear',
-                  x: 0,
-                  y: 0,
-                  x2: 0,
-                  y2: 1,
-                  colorStops: [
-                    { offset: 0, color: '#F43F5E' },
-                    { offset: 1, color: 'rgba(244, 63, 94, 0.2)' },
-                  ],
-                },
-            borderRadius: [5, 5, 0, 0],
+            },
+            borderRadius: [4, 4, 0, 0],
           },
-          data: morphedData.counts,
+          data: morphed.counts,
         },
         {
-          name: '核密度平滑曲线 (Gaussian KDE)',
+          name: 'KDE',
           type: 'line',
           smooth: true,
           showSymbol: false,
           lineStyle: {
-            width: 3.5,
-            color: isNormalized ? CHART_COLORS.emerald : CHART_COLORS.amber,
+            width: 3,
+            color: normalized ? CHART_COLORS.emerald : CHART_COLORS.amber,
           },
-          data: morphedData.kde,
+          data: morphed.kde,
         },
       ],
     };
-  }, [item, morphedData, morphProgress, selectedFeature]);
+  }, [item, morphed, morphProgress, selectedFeature]);
 
   const qqOption = useMemo(() => {
-    if (!morphedData) return {};
-    const isNormalized = morphProgress > 0.5;
+    if (!morphed) return {};
+    const normalized = morphProgress > 0.5;
     return {
       backgroundColor: 'transparent',
-      animationDurationUpdate: 120,
-      tooltip: {
-        ...ECHARTS_DARK_TOOLTIP,
-        trigger: 'item',
-        formatter: (p: any) =>
-          `理论高斯分位: <span class="font-mono text-cyan-300">${p.value[0]}</span><br/>实际样本分位: <span class="font-mono text-emerald-300">${p.value[1]}</span>`,
-      },
+      animationDurationUpdate: 100,
+      tooltip: { ...ECHARTS_DARK_TOOLTIP, trigger: 'item' },
       legend: {
-        top: 6,
-        right: 12,
-        textStyle: { color: '#CBD5E1', fontSize: 11 },
+        top: 2,
+        right: 4,
+        textStyle: { color: '#94A3B8', fontSize: 11 },
       },
-      grid: { left: 56, right: 24, top: 48, bottom: 44 },
+      grid: { left: 52, right: 18, top: 40, bottom: 44 },
       xAxis: {
         type: 'value',
-        name: '理论标准正态分位数 N(0, 1)',
+        name: '理论正态分位',
         nameLocation: 'middle',
         nameGap: 28,
         min: -2.6,
         max: 2.6,
-        nameTextStyle: { color: '#94A3B8', fontSize: 11 },
+        nameTextStyle: { color: '#64748B', fontSize: 11 },
         splitLine: { lineStyle: { color: CHART_COLORS.gridLine } },
         axisLabel: { color: '#94A3B8', fontFamily: 'JetBrains Mono' },
       },
       yAxis: {
         type: 'value',
-        name: '标准化样本分位数',
+        name: '样本分位',
         min: -2.6,
         max: 3.6,
-        nameTextStyle: { color: '#94A3B8', fontSize: 11 },
+        nameTextStyle: { color: '#64748B', fontSize: 11 },
         splitLine: { lineStyle: { color: CHART_COLORS.gridLine } },
         axisLabel: { color: '#94A3B8', fontFamily: 'JetBrains Mono' },
       },
       series: [
         {
-          name: '理想高斯对角线 (y = x)',
+          name: '理想 y = x',
           type: 'line',
           showSymbol: false,
-          lineStyle: { color: '#64748B', width: 2, type: 'dashed' },
+          lineStyle: { color: '#64748B', width: 1.5, type: 'dashed' },
           data: [
             [-2.5, -2.5],
             [2.5, 2.5],
           ],
         },
         {
-          name: 'Q-Q 样本分位轨迹',
+          name: 'Q-Q 轨迹',
           type: 'scatter',
-          symbolSize: 8,
+          symbolSize: 7,
           itemStyle: {
-            color: isNormalized ? CHART_COLORS.emerald : CHART_COLORS.rose,
-            borderColor: '#fff',
-            borderWidth: 0.6,
+            color: normalized ? CHART_COLORS.emerald : CHART_COLORS.rose,
           },
-          data: morphedData.qqPoints,
+          data: morphed.qqPoints,
         },
       ],
     };
-  }, [morphedData, morphProgress]);
+  }, [morphed, morphProgress]);
 
-  if (!item || !morphedData) return null;
+  if (!item || !morphed) return null;
+
+  const insights = [
+    `${selectedFeature} 原始偏度 γ₁ = ${item.raw_skew.toFixed(2)}，长尾会主导损失与残差形态。`,
+    '偏态不是「丑一点」——它让同方差、正态误差假设失效，豪宅端尤其吃亏。',
+    `当前变形 ${Math.round(morphProgress * 100)}% · λ≈${morphed.lambda.toFixed(2)} · 实时 γ₁=${morphed.skew.toFixed(3)}。`,
+    'Q-Q 贴合对角线后，再进入领域特征合成才站得住脚——顺序很重要。',
+  ];
 
   return (
-    <div className="space-y-5 pb-16">
-      {/* Top Interactive Control Header */}
-      <div className="rounded-3xl bg-slate-900/85 border border-slate-800/90 p-5 space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3.5">
-            <div className="p-3 rounded-2xl bg-amber-500/15 border border-amber-500/35 text-amber-300">
-              <Waves className="w-6 h-6" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded bg-amber-500/20 text-amber-300">
-                  PAGE 03 · DISTRIBUTION MORPHING LAB
-                </span>
-                <h1 className="text-lg sm:text-xl font-extrabold text-white">
-                  偏态长尾动态变形工坊：为什么必须做 Box-Cox / Log1p 正态化？
-                </h1>
-              </div>
-              <p className="text-xs text-slate-400 mt-0.5">
-                选择任意右偏特征并拖动正态化变形滑块（或点击自动播放变形动画），实时观察分布如何从右偏长尾收敛为对称高斯钟形曲线
-              </p>
+    <PresentationStage
+      chapter="03"
+      kicker="分布篇 · 先校准假设"
+      title="为什么要做正态变换？亲自拖一次 λ"
+      subtitle="不要背「要对偏态做 Log / Box-Cox」这句话。选一个特征，跟着步骤把分布从右偏拖到近似正态，再用 Q-Q 图验收。"
+      accent="amber"
+      steps={STEPS}
+      activeStep={step}
+      onStepChange={setStep}
+      dimensions={dims}
+      activeDimension={selectedFeature}
+      onDimensionChange={(id) => {
+        setSelectedFeature(id);
+        setMorphProgress(step >= 2 ? morphProgress : 0);
+      }}
+      insight={insights[step]}
+      stageMeta={
+        <div className="flex items-center gap-2">
+          <div className="rounded-2xl border border-white/8 bg-black/25 px-3 py-2 text-center">
+            <div className="text-[10px] text-slate-500">γ₁ 偏度</div>
+            <div
+              className={`font-mono text-sm ${
+                Math.abs(morphed.skew) < 0.5 ? 'text-emerald-300' : 'text-rose-300'
+              }`}
+            >
+              <AnimatedNumber value={morphed.skew} decimals={3} durationMs={100} />
             </div>
           </div>
-
-          <button
-            type="button"
-            onClick={() => setIsAutoPlaying((v) => !v)}
-            className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-cyan-400 to-emerald-400 text-slate-950 font-bold text-xs flex items-center gap-2 shadow-[0_0_24px_rgba(6,182,212,0.35)] hover:brightness-110 transition-all"
-          >
-            {isAutoPlaying ? (
-              <>
-                <Pause className="w-4 h-4 fill-slate-950" />
-                <span>正在播放正态化变形动画...</span>
-              </>
-            ) : (
-              <>
-                <Play className="w-4 h-4 fill-slate-950" />
-                <span>播放 Raw → Box-Cox 连续变形动画</span>
-              </>
-            )}
-          </button>
-        </div>
-
-        {/* Feature Pills + Continuous Morph Slider + Live Gauges */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-center pt-2 border-t border-slate-800/80">
-          {/* Feature Selector Pills (5 cols) */}
-          <div className="lg:col-span-5 flex flex-wrap gap-1.5">
-            {featureKeys.map((k) => {
-              const active = k === selectedFeature;
-              return (
-                <button
-                  key={k}
-                  type="button"
-                  onClick={() => setSelectedFeature(k)}
-                  className={`px-2.5 py-1 rounded-xl text-xs font-mono border transition-all ${
-                    active
-                      ? 'bg-cyan-500/25 border-cyan-400 text-white shadow-[0_0_15px_rgba(6,182,212,0.3)]'
-                      : 'bg-slate-950/80 border-slate-800 text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  {k} (γ₁={skewness_lab[k].raw_skew})
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Continuous Morph Slider (4 cols) */}
-          <div className="lg:col-span-4 rounded-2xl bg-slate-950/90 border border-slate-800 px-4 py-2.5">
-            <div className="flex items-center justify-between text-xs mb-1">
-              <span className="text-rose-300 font-mono">0% 原始右偏</span>
-              <span className="text-cyan-300 font-mono font-bold">
-                变形进度: {Math.round(morphProgress * 100)}% (λ=
-                {morphedData.currentLambda.toFixed(2)})
-              </span>
-              <span className="text-emerald-300 font-mono">100% Box-Cox</span>
-            </div>
-            <input
-              type="range"
-              min={0}
-              max={1}
-              step={0.02}
-              value={morphProgress}
-              onChange={(e) => {
-                setIsAutoPlaying(false);
-                setMorphProgress(Number(e.target.value));
-              }}
-              className="w-full accent-emerald-400 cursor-pointer"
-            />
-          </div>
-
-          {/* Live Skewness & Kurtosis Gauges (3 cols) */}
-          <div className="lg:col-span-3 grid grid-cols-2 gap-2.5">
-            <div className="rounded-2xl bg-slate-950 border border-slate-800 p-2.5 text-center">
-              <div className="text-[10px] text-slate-400">实时偏度 Skewness γ₁</div>
-              <div
-                className={`text-lg font-extrabold font-mono mt-0.5 ${
-                  Math.abs(morphedData.currentSkew) < 0.5
-                    ? 'text-emerald-300'
-                    : 'text-rose-400'
-                }`}
-              >
-                <AnimatedNumber
-                  value={morphedData.currentSkew}
-                  decimals={3}
-                  durationMs={120}
-                />
-              </div>
-            </div>
-            <div className="rounded-2xl bg-slate-950 border border-slate-800 p-2.5 text-center">
-              <div className="text-[10px] text-slate-400">实时峰度 Kurtosis γ₂</div>
-              <div className="text-lg font-extrabold font-mono text-cyan-300 mt-0.5">
-                <AnimatedNumber
-                  value={morphedData.currentKurt}
-                  decimals={2}
-                  durationMs={120}
-                />
-              </div>
+          <div className="rounded-2xl border border-white/8 bg-black/25 px-3 py-2 text-center">
+            <div className="text-[10px] text-slate-500">λ</div>
+            <div className="font-mono text-sm text-cyan-300">
+              <AnimatedNumber value={morphed.lambda} decimals={2} durationMs={100} />
             </div>
           </div>
         </div>
-      </div>
-
-      {/* Main Dual Visualization Stage: Histogram+KDE (6 cols) + Q-Q Normality Plot (6 cols) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-        <div className="lg:col-span-6 rounded-3xl bg-slate-900/75 border border-slate-800/90 p-5">
-          <div className="flex items-center justify-between mb-2">
-            <div>
-              <h2 className="text-base font-bold text-white">
-                动态分布直方图与高斯核密度曲线 (Morphing Histogram & KDE)
-              </h2>
-              <p className="text-xs text-slate-400">
-                观察长尾极值如何被对数/幂指数压缩回中心对称分布
-              </p>
-            </div>
-            <div className="flex gap-1.5">
-              <button
-                type="button"
-                onClick={() => setMorphProgress(0)}
-                className={`px-2.5 py-1 rounded-lg text-xs font-mono border ${
-                  morphProgress < 0.2
-                    ? 'bg-rose-500/20 border-rose-400 text-rose-200'
-                    : 'bg-slate-950 border-slate-800 text-slate-400'
-                }`}
-              >
-                Raw (0%)
-              </button>
-              <button
-                type="button"
-                onClick={() => setMorphProgress(1)}
-                className={`px-2.5 py-1 rounded-lg text-xs font-mono border ${
-                  morphProgress > 0.8
-                    ? 'bg-emerald-500/20 border-emerald-400 text-emerald-200'
-                    : 'bg-slate-950 border-slate-800 text-slate-400'
-                }`}
-              >
-                Box-Cox (100%)
-              </button>
-            </div>
-          </div>
-          <div className="h-[410px] w-full">
-            <ReactECharts
-              option={histOption}
-              style={{ height: '100%', width: '100%' }}
-              notMerge={true}
-            />
-          </div>
-        </div>
-
-        <div className="lg:col-span-6 rounded-3xl bg-slate-900/75 border border-slate-800/90 p-5">
-          <div className="flex items-center justify-between mb-2">
-            <div>
-              <h2 className="text-base font-bold text-white">
-                高斯正态分位数检验图 (Normal Q-Q Diagnostic Plot)
-              </h2>
-              <p className="text-xs text-slate-400">
-                当散点完全贴合 45° 虚线对角线时，满足线性与梯度模型的高斯同方差假设
-              </p>
-            </div>
-            <span className="text-xs font-mono text-emerald-300 bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-1 rounded-lg">
-              CV 误差降低 -$1,570
+      }
+      aside={
+        <div className="rounded-[20px] border border-white/8 bg-[#0A1020]/70 p-4 space-y-3">
+          <div className="flex items-center justify-between text-[11px] font-mono uppercase tracking-wider text-slate-500">
+            <span>变形进度</span>
+            <span className="text-cyan-300 normal-case tracking-normal">
+              {Math.round(morphProgress * 100)}%
             </span>
           </div>
-          <div className="h-[410px] w-full">
-            <ReactECharts
-              option={qqOption}
-              style={{ height: '100%', width: '100%' }}
-              notMerge={true}
-            />
+          <input
+            type="range"
+            min={0}
+            max={1}
+            step={0.02}
+            value={morphProgress}
+            onChange={(e) => {
+              setIsAutoPlaying(false);
+              setMorphProgress(Number(e.target.value));
+            }}
+            className="w-full"
+          />
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setViewDim('hist')}
+              className={`flex-1 rounded-xl py-2 text-[12px] border ${
+                viewDim === 'hist'
+                  ? 'border-amber-400/40 bg-amber-500/10 text-amber-100'
+                  : 'border-white/8 text-slate-400'
+              }`}
+            >
+              直方图
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewDim('qq')}
+              className={`flex-1 rounded-xl py-2 text-[12px] border ${
+                viewDim === 'qq'
+                  ? 'border-emerald-400/40 bg-emerald-500/10 text-emerald-100'
+                  : 'border-white/8 text-slate-400'
+              }`}
+            >
+              Q-Q 图
+            </button>
           </div>
+          <button
+            type="button"
+            onClick={() => setIsAutoPlaying(true)}
+            className="w-full flex items-center justify-center gap-2 rounded-xl bg-white text-slate-950 py-2.5 text-[12px] font-semibold hover:bg-cyan-50 transition"
+          >
+            <Play className="w-3.5 h-3.5" />
+            播放 Raw → Box-Cox
+          </button>
         </div>
+      }
+    >
+      <div className="h-[460px] w-full">
+        <ReactECharts
+          option={viewDim === 'qq' ? qqOption : histOption}
+          style={{ height: '100%', width: '100%' }}
+          notMerge
+        />
       </div>
-    </div>
+    </PresentationStage>
   );
 };

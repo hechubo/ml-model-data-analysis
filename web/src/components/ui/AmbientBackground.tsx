@@ -1,48 +1,26 @@
 import React from 'react';
-import { motion } from 'framer-motion';
 
+/** Quiet editorial backdrop — presentation-friendly, no busy aurora. */
 export const AmbientBackground: React.FC = () => {
   return (
-    <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden bg-[#04070F]">
-      {/* Animated glowing aurora orbs */}
-      <motion.div
-        animate={{
-          x: [0, 45, -25, 0],
-          y: [0, -35, 25, 0],
-          scale: [1, 1.12, 0.95, 1],
-        }}
-        transition={{ duration: 18, repeat: Infinity, ease: 'easeInOut' }}
-        className="absolute -top-32 -left-32 w-[540px] h-[540px] rounded-full bg-cyan-500/12 blur-[130px]"
-      />
-      <motion.div
-        animate={{
-          x: [0, -50, 30, 0],
-          y: [0, 40, -30, 0],
-          scale: [1, 0.94, 1.1, 1],
-        }}
-        transition={{ duration: 22, repeat: Infinity, ease: 'easeInOut' }}
-        className="absolute top-1/4 -right-32 w-[520px] h-[520px] rounded-full bg-violet-500/12 blur-[140px]"
-      />
-      <motion.div
-        animate={{
-          x: [0, 30, -40, 0],
-          y: [0, -25, 35, 0],
-        }}
-        transition={{ duration: 20, repeat: Infinity, ease: 'easeInOut' }}
-        className="absolute -bottom-40 left-1/3 w-[580px] h-[460px] rounded-full bg-emerald-500/8 blur-[140px]"
-      />
-
-      {/* Precision coordinate grid */}
+    <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden bg-[#05080F]">
       <div
-        className="absolute inset-0 opacity-30"
+        className="absolute inset-0"
+        style={{
+          background:
+            'radial-gradient(ellipse 70% 55% at 15% 0%, rgba(56,189,248,0.08), transparent 55%), radial-gradient(ellipse 55% 45% at 90% 10%, rgba(16,185,129,0.06), transparent 50%), radial-gradient(ellipse 50% 40% at 50% 100%, rgba(99,102,241,0.05), transparent 55%)',
+        }}
+      />
+      <div
+        className="absolute inset-0 opacity-[0.22]"
         style={{
           backgroundImage: `
-            linear-gradient(to right, rgba(56, 189, 248, 0.05) 1px, transparent 1px),
-            linear-gradient(to bottom, rgba(56, 189, 248, 0.05) 1px, transparent 1px)
+            linear-gradient(to right, rgba(148,163,184,0.045) 1px, transparent 1px),
+            linear-gradient(to bottom, rgba(148,163,184,0.045) 1px, transparent 1px)
           `,
-          backgroundSize: '48px 48px',
+          backgroundSize: '56px 56px',
           maskImage:
-            'radial-gradient(ellipse 85% 80% at 50% 45%, #000 50%, transparent 100%)',
+            'radial-gradient(ellipse 80% 70% at 50% 40%, #000 40%, transparent 100%)',
         }}
       />
     </div>

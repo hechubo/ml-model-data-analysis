@@ -452,21 +452,50 @@ export const Page7AblationSandboxShap: React.FC<Page7Props> = ({
   };
 
   return (
-    <div className="space-y-6 pb-16">
+    <div className="space-y-5 pb-16">
+      <header className="relative overflow-hidden rounded-[28px] border border-white/8 bg-[#0A1020]/75 backdrop-blur-xl px-6 sm:px-8 py-6">
+        <div className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-emerald-400 to-cyan-400" />
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div className="max-w-3xl space-y-2">
+            <div className="flex items-center gap-3">
+              <span className="font-mono text-[11px] tracking-[0.22em] uppercase text-emerald-300">
+                Chapter 07
+              </span>
+              <span className="h-px w-8 bg-white/15" />
+              <span className="text-[12px] text-slate-400">验证篇 · 消融 + SHAP</span>
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-white leading-tight">
+              最后证明：关掉模块，误差会不会涨回来？
+            </h1>
+            <p className="text-sm text-slate-400 leading-relaxed">
+              先在消融沙盒里开关每一组特征工程，亲眼看 RMSE / R² 回摆；再拖动房源滑块，把单套估值拆成美元级 SHAP 瀑布。这一章是「收益是否可复核」的收束。
+            </p>
+          </div>
+          <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-2.5 text-right">
+            <div className="text-[10px] text-emerald-400/80 uppercase tracking-wider">
+              沙盒实时 R²
+            </div>
+            <div className="font-mono text-lg text-emerald-300">
+              <AnimatedNumber value={sandboxStats.currentR2} decimals={4} />
+            </div>
+          </div>
+        </div>
+      </header>
+
       {/* Section 1: Interactive Feature Engineering Ablation Sandbox */}
-      <div className="rounded-3xl bg-slate-900/80 border border-slate-800/90 p-5 sm:p-6">
-        <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-slate-800/80">
+      <div className="rounded-[28px] bg-[#0A1020]/70 border border-white/8 p-5 sm:p-6">
+        <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-white/8">
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300">
-                PAGE 07 · INTERACTIVE ABLATION SANDBOX & SHAP XAI
+              <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/25">
+                01 · 消融沙盒
               </span>
-              <h1 className="text-lg sm:text-xl font-extrabold text-white">
-                交互式特征消融沙盒：亲手勾选/关闭特征模块，实时验证模型收益
-              </h1>
+              <h2 className="text-base sm:text-lg font-semibold text-white">
+                勾选 / 关闭特征模块，实时重算 6 模型误差
+              </h2>
             </div>
-            <p className="text-xs text-slate-400 mt-0.5">
-              点击左侧 6 大特征工程开关，右侧 6 种机器学习模型的交叉验证误差 (RMSE) 与解释方差 (R²) 将实时动态重算
+            <p className="text-xs text-slate-500 mt-1">
+              建议演示顺序：先「全部关闭」退回基线，再逐个打开，观察绿条如何缩短
             </p>
           </div>
 
@@ -566,14 +595,19 @@ export const Page7AblationSandboxShap: React.FC<Page7Props> = ({
       </div>
 
       {/* Section 2: Real-Time What-If Property Valuation & SHAP Waterfall Simulator */}
-      <div className="rounded-3xl bg-slate-900/80 border border-slate-800/90 p-5 sm:p-6">
-        <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-800/80">
+      <div className="rounded-[28px] bg-[#0A1020]/70 border border-white/8 p-5 sm:p-6">
+        <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-white/8">
           <div>
-            <h2 className="text-base sm:text-lg font-extrabold text-white">
-              SHAP 美元级实时房产估值与归因模拟器 (What-If Valuation & SHAP Waterfall)
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-300 border border-cyan-500/25">
+                02 · SHAP 归因
+              </span>
+            </div>
+            <h2 className="text-base sm:text-lg font-semibold text-white">
+              拖动房源配置，把估值拆成美元级瀑布
             </h2>
-            <p className="text-xs text-slate-400 mt-0.5">
-              点击右上方 4 类典型房源预设（或拖动下方滑块），实时合成特征并分解每一项因子对房价的正负美元拉动
+            <p className="text-xs text-slate-500 mt-1">
+              先点一个预设（顶豪 / 中产 / 老城翻新 / 刚需），再微调滑块，看每一项特征的 +$ / −$ 拉动
             </p>
           </div>
 
